@@ -2,7 +2,7 @@ import os
 import sys
 import discord
 from discord.ext import commands
-from discord import app_commands
+from discord import app_commands, ButtonStyle
 import logging
 import json
 import requests
@@ -48,10 +48,10 @@ WALLET_CHECK_INTERVAL = 30  # Check every 30 minutes
 # Collection configurations
 COLLECTIONS = {
     'pixelpepes': 'Pixel Pepe Holder',
+    'space-pepes': 'Space Pepe Holder',
     'soy-pepes': 'Soy Pepe Holder',
-    'pixel-mumus': 'Pixel Mumu Holder',
     'clay-pepes': 'Clay Pepe Holder',
-    'space-pepes': 'Space Pepe Holder'
+    'pixel-mumus': 'Pixel Mumu Holder',
 }
 
 # Initialize bot with minimal required intents and permissions
@@ -64,6 +64,31 @@ bot = commands.Bot(
     intents=intents,
     description='Ordinal Verification Bot'
 )
+
+class VerificationView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label='Verify', style=ButtonStyle.primary, custom_id='verify_button')
+    async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await verify(interaction)
+
+    @discord.ui.button(label='Help', style=ButtonStyle.secondary, custom_id='help_button')
+    async def help_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        help_text = (
+            "**🤖 Pixel Pepe Verifier Bot Help**\n\n"
+            "**Commands:**\n"
+            "`/add_address <address>` - Link your wallet address\n"
+            "`/remove_address <address>` - Remove a linked wallet\n"
+            "`/list_addresses` - View your linked wallets\n"
+            "`/verify` - Check your NFT holdings and update roles\n\n"
+            "**How to Use:**\n"
+            "1. Click the Verify button or use `/add_address` to link your wallet\n"
+            "2. The bot will check your wallet for NFTs\n"
+            "3. You'll receive roles based on your holdings\n"
+            "4. Your holdings are checked every 30 minutes to keep roles updated\n"
+        )
+        await interaction.response.send_message(help_text, ephemeral=True)
 
 # Define required permissions for commands
 REQUIRED_PERMISSIONS = discord.Permissions(
@@ -148,6 +173,23 @@ async def verify_all_wallets():
         # Wait for next check interval
         await asyncio.sleep(WALLET_CHECK_INTERVAL * 60)
 
+@bot.tree.command(name="setup_verification", description="Setup verification message with buttons (Requires Manage Channels)")
+@app_commands.checks.has_permissions(manage_channels=True)
+async def setup_verification(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="🎭 Pixel Pepe Holder Verification",
+        description=(
+            "Welcome to the Pixel Pepe holder verification!\n\n"
+            "Click the **Verify** button below to link your wallet and receive your holder roles.\n"
+            "Click the **Help** button for detailed instructions on how to use the bot."
+        ),
+        color=discord.Color.blue()
+    )
+    
+    view = VerificationView()
+    await interaction.channel.send(embed=embed, view=view)
+    await interaction.response.send_message("✅ Verification message set up!", ephemeral=True)
+
 @bot.event
 async def setup_hook():
     logging.info('Setting up bot...')
@@ -166,9 +208,9 @@ async def setup_hook():
             list_addresses,
             verify,
             setup_roles,
-            check_roles
+            check_roles,
+            setup_verification      
         ]
-        
         logging.info('Registering commands with minimal permissions...')
         for cmd in commands:
             logging.info(f'Adding command: {cmd.name}')
