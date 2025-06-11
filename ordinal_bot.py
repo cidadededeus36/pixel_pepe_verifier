@@ -42,6 +42,9 @@ CHECK_INTERVAL = 60  # seconds
 VERIFICATION_TIMEOUT = 1800  # 30 minutes
 USER_DATA_FILE = 'data/user_addresses.json'
 
+# How often to check all wallets (in minutes)
+WALLET_CHECK_INTERVAL = 30  # Check every 30 minutes
+
 # Collection configurations
 COLLECTIONS = {
     'pixelpepes': 'Pixel Pepe Holder',
@@ -51,23 +54,104 @@ COLLECTIONS = {
     'space-pepes': 'Space Pepe Holder'
 }
 
-# Initialize bot with minimal required intents
+# Initialize bot with minimal required intents and permissions
 intents = discord.Intents.default()
 intents.guilds = True  # Only need guilds intent for slash commands
 
-bot = commands.Bot(command_prefix='!', intents=intents, description='Ordinal Verification Bot')
+# Set minimal required permissions
+perms = discord.Permissions.none()
+perms.manage_roles = True  # For role assignment
+perms.view_channel = True  # To see channels
+perms.send_messages = True  # To respond to commands
+perms.use_application_commands = True  # For slash commands
+
+bot = commands.Bot(
+    command_prefix='!',
+    intents=intents,
+    description='Ordinal Verification Bot',
+    default_permissions=perms
+)
 
 # Remove default help command as we'll use slash commands
 bot.remove_command('help')
 
+async def verify_all_wallets():
+    """Periodically verify all registered wallets and update roles"""
+    while True:
+        try:
+            logging.info('Starting periodic wallet verification...')
+            guild_id = int(os.getenv('GUILD_ID', '0'))
+            guild = bot.get_guild(guild_id)
+            
+            if not guild:
+                logging.error(f'Could not find guild with ID {guild_id}')
+                await asyncio.sleep(WALLET_CHECK_INTERVAL * 60)
+                continue
+                
+            user_data = load_user_data()
+            
+            for user_id, addresses in user_data.items():
+                try:
+                    member = await guild.fetch_member(int(user_id))
+                    if not member:
+                        logging.warning(f'Could not find member with ID {user_id}')
+                        continue
+                        
+                    logging.info(f'Checking addresses for user {member.name} ({user_id})')
+                    
+                    # Check each collection
+                    for collection_slug, role_name in COLLECTIONS.items():
+                        role = discord.utils.get(guild.roles, name=role_name)
+                        if not role:
+                            logging.warning(f'Could not find role {role_name}')
+                            continue
+                            
+                        # Check if user owns any NFTs in collection
+                        has_nft = False
+                        for address in addresses:
+                            owns, count, _ = await verify_ownership(address, collection_slug)
+                            if owns and count > 0:
+                                has_nft = True
+                                break
+                                
+                        # Update role
+                        try:
+                            if has_nft and role not in member.roles:
+                                await member.add_roles(role)
+                                logging.info(f'Added role {role_name} to {member.name}')
+                            elif not has_nft and role in member.roles:
+                                await member.remove_roles(role)
+                                logging.info(f'Removed role {role_name} from {member.name}')
+                        except discord.Forbidden:
+                            logging.error(f'Missing permissions to modify roles for {member.name}')
+                        except Exception as e:
+                            logging.error(f'Error updating roles for {member.name}: {e}')
+                            
+                except Exception as e:
+                    logging.error(f'Error processing user {user_id}: {e}')
+                    
+                # Sleep briefly between users to avoid rate limits
+                await asyncio.sleep(1)
+                
+            logging.info('Finished periodic wallet verification')
+            
+        except Exception as e:
+            logging.error(f'Error in verify_all_wallets: {e}')
+            
+        # Wait for next check interval
+        await asyncio.sleep(WALLET_CHECK_INTERVAL * 60)
+
 @bot.event
 async def setup_hook():
     logging.info('Setting up bot...')
+    
+    # Start periodic wallet verification
+    bot.loop.create_task(verify_all_wallets())
     try:
         MY_GUILD = discord.Object(id=int(os.getenv('GUILD_ID', '0')))
         logging.info(f'Guild ID: {MY_GUILD.id}')
         
-        # Copy commands to guild
+        # Register commands
         commands = [
             ping,
             add_address,
@@ -78,10 +162,10 @@ async def setup_hook():
             check_roles
         ]
         
-        logging.info('Copying commands to guild...')
+        logging.info('Registering commands...')
         for cmd in commands:
-            logging.info(f'Copying command: {cmd.name}')
-            bot.tree.copy_global_to(guild=MY_GUILD)
+            logging.info(f'Adding command: {cmd.name}')
+            bot.tree.add_command(cmd, guild=MY_GUILD)
         
         logging.info('Syncing commands...')
         synced = await bot.tree.sync(guild=MY_GUILD)
@@ -106,17 +190,6 @@ async def on_ready():
         
         if guild.me.guild_permissions.use_application_commands:
             logging.info('Bot has permission to use application commands')
-            
-            # Re-sync commands to guild
-            MY_GUILD = discord.Object(id=guild.id)
-            try:
-                logging.info('Re-syncing commands to guild...')
-                synced = await bot.tree.sync(guild=MY_GUILD)
-                logging.info(f'Commands re-synced successfully! Synced {len(synced)} commands:')
-                for cmd in synced:
-                    logging.info(f'  - {cmd.name}')
-            except Exception as e:
-                logging.error(f'Failed to re-sync commands: {e}', exc_info=True)
         else:
             logging.warning('Bot does not have permission to use application commands')
         

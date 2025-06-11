@@ -6,6 +6,7 @@ A Discord bot that verifies Ordinal ownership across multiple collections and as
 
 - Verify Ordinal ownership using BestInSlot.xyz API
 - Automatic role assignment based on NFT holdings
+- Periodic verification (every 30 minutes) to remove roles if NFTs are sold
 - Support for multiple collections
 - Slash command interface
 - Ephemeral responses for privacy
