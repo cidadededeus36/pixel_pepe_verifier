@@ -65,6 +65,56 @@ bot = commands.Bot(
     description='Ordinal Verification Bot'
 )
 
+class CommandView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label='Add Address', style=ButtonStyle.primary, custom_id='add_address_button', row=0)
+    async def add_address_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(AddAddressModal())
+
+    @discord.ui.button(label='Remove Address', style=ButtonStyle.danger, custom_id='remove_address_button', row=0)
+    async def remove_address_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.send_modal(RemoveAddressModal())
+
+    @discord.ui.button(label='List Addresses', style=ButtonStyle.secondary, custom_id='list_addresses_button', row=1)
+    async def list_addresses_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await list_addresses._callback(interaction)
+
+    @discord.ui.button(label='Check Roles', style=ButtonStyle.secondary, custom_id='check_roles_button', row=1)
+    async def check_roles_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await check_roles._callback(interaction)
+
+    @discord.ui.button(label='Verify Now', style=ButtonStyle.success, custom_id='verify_help_button', row=2)
+    async def verify_help_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer(ephemeral=True)
+        await verify._callback(interaction)
+
+class AddAddressModal(discord.ui.Modal, title='Add Wallet Address'):
+    address = discord.ui.TextInput(label='Wallet Address', placeholder='Enter your wallet address here')
+
+    async def on_submit(self, interaction: discord.Interaction):
+        user_id = str(interaction.user.id)
+        address = str(self.address)
+        
+        # Check bio verification first
+        has_bio = await verify_me_bio(address, user_id)
+        if not has_bio:
+            await interaction.response.send_message(
+                "❌ Please add your Discord ID to your Magic Eden bio first!\n" \
+                f"Your Discord ID is: {user_id}", 
+                ephemeral=True
+            )
+            return
+            
+        await add_address._callback(interaction, address)
+
+class RemoveAddressModal(discord.ui.Modal, title='Remove Wallet Address'):
+    address = discord.ui.TextInput(label='Wallet Address', placeholder='Enter the wallet address to remove')
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await remove_address._callback(interaction, str(self.address))
+
 class VerificationView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -77,19 +127,21 @@ class VerificationView(discord.ui.View):
     @discord.ui.button(label='Help', style=ButtonStyle.secondary, custom_id='help_button')
     async def help_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         help_text = (
-            "**🐸 Pixel Pepe Verifier Bot Help**\n\n"
-            "**Commands:**\n"
-            "`/add_address <address>` - Link your wallet address\n"
-            "`/remove_address <address>` - Remove a linked wallet\n"
-            "`/list_addresses` - View your linked wallets\n"
-            "`/verify` - Check your Ordinal holdings and update roles\n\n"
-            "**How to Use:**\n"
-            "1. Click the Verify button or use `/add_address` to link your wallet\n"
-            "2. The bot will check your wallet for Ordinals\n"
-            "3. You'll receive roles based on your holdings\n"
-            "4. Your holdings are checked every 30 minutes to keep roles updated\n"
+            "**🐸 Pixel Pepes Verifier Bot Help**\n\n"
+            "Use the buttons below to manage your verification:\n\n"
+            "• **Add Address** - Link your wallet\n"
+            "• **Remove Address** - Remove a wallet\n"
+            "• **List Addresses** - View your wallets\n"
+            "• **Check Roles** - View your roles\n"
+            "• **Verify Now** - Check holdings\n\n"
+            "**How it Works:**\n"
+            "1. Click Add Address & enter your wallet\n"
+            "2. Click Verify to check your Ordinals\n"
+            "3. Get roles based on your holdings\n"
+            "4. Roles update every 30 minutes\n"
         )
-        await interaction.response.send_message(help_text, ephemeral=True)
+        view = CommandView()
+        await interaction.response.send_message(help_text, view=view, ephemeral=True)
 
 # Define required permissions for commands
 REQUIRED_PERMISSIONS = discord.Permissions(
@@ -189,9 +241,9 @@ async def setup_verification(interaction: discord.Interaction):
         return
 
     embed = discord.Embed(
-        title="🐸 Pixel Pepe Holder Verification",
+        title="🐸 Pixel Pepes Holder Verification",
         description=(
-            "Welcome to the Pixel Pepe holder verification!\n\n"
+            "Welcome to the Pixel Pepes holder verification!\n\n"
             "Click the **Verify** button below to link your wallet and receive your holder roles.\n"
             "Click the **Help** button for detailed instructions on how to use the bot."
         ),
@@ -219,14 +271,9 @@ async def setup_hook():
         logging.info(f'Guild ID: {MY_GUILD.id}')
         
         # Register commands with minimal permissions
+        # Only register commands that don't have decorators
         commands = [
-            ping,
-            remove_address,
-            list_addresses,
-            verify,
-            setup_roles,
-            setup_verification,
-            check_roles
+            setup_verification
         ]
         logging.info('Registering commands with minimal permissions...')
         for cmd in commands:
@@ -358,10 +405,18 @@ async def verify(interaction: discord.Interaction):
 
     user_id = str(interaction.user.id)
     if user_id not in user_addresses or not user_addresses[user_id]:
+        class NoAddressView(discord.ui.View):
+            def __init__(self):
+                super().__init__(timeout=None)
+
+            @discord.ui.button(label='Add Address', style=ButtonStyle.primary)
+            async def add_address_button(self, inner_interaction: discord.Interaction, button: discord.ui.Button):
+                await inner_interaction.response.send_modal(AddAddressModal())
+
         if not interaction.response.is_done():
-            await interaction.response.send_message("❌ You haven't registered any wallet addresses! Use `/add_address` first.", ephemeral=True)
+            await interaction.response.send_message("❌ No wallet addresses found! Click below to add one:", view=NoAddressView(), ephemeral=True)
         else:
-            await interaction.followup.send("❌ You haven't registered any wallet addresses! Use `/add_address` first.", ephemeral=True)
+            await interaction.followup.send("❌ No wallet addresses found! Click below to add one:", view=NoAddressView(), ephemeral=True)
         return
 
     if not interaction.response.is_done():
@@ -475,11 +530,7 @@ async def check_roles(interaction: discord.Interaction):
     else:
         msg = "You don't have any collection roles yet!"
     
-    await interaction.response.send_message(msg, ephemeral=True)    
-    if verified_roles:
-        await ctx.send(f"You are verified for: {', '.join(verified_roles)}")
-    else:
-        await ctx.send("You don't have any collection verification roles yet.")
+    await interaction.response.send_message(msg, ephemeral=True)
 
 # Rate limiting setup
 request_times = deque()
