@@ -1,0 +1,15 @@
+[Unit]
+Description=Discord NFT Verification Bot
+After=network.target
+
+[Service]
+Type=simple
+User=badua
+WorkingDirectory=/home/badua/dev/projects/discord_verify_bot - Copy
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/badua/dev/projects/discord_verify_bot - Copy/venv/bin/python ordinal_bot.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
