@@ -1,14 +1,16 @@
-# Discord Ordinal Verification Bot
+# Pixel Pepes Verifier Bot
 
-A Discord bot that verifies Ordinal ownership across multiple collections and assigns roles accordingly.
+A Discord bot that verifies Ordinal ownership for Pixel Pepes collections and assigns roles accordingly.
 
 ## Features
 
 - Verify Ordinal ownership using BestInSlot.xyz API
-- Automatic role assignment based on NFT holdings
-- Periodic verification (every 30 minutes) to remove roles if NFTs are sold
+- Magic Eden bio verification for wallet ownership
+- Interactive button interface for all commands
+- Automatic role assignment based on Ordinal holdings
+- Periodic verification (every 30 minutes) to remove roles if Ordinals are sold
 - Support for multiple collections
-- Slash command interface
+- Slash commands and buttons for easy interaction
 - Ephemeral responses for privacy
 
 ## Setup
@@ -31,27 +33,35 @@ A Discord bot that verifies Ordinal ownership across multiple collections and as
    python ordinal_bot.py
    ```
 
-## Commands
+## Commands & Buttons
 
-- `/verify` - Verify NFT ownership and get roles
-- `/add_address <address>` - Add a wallet address to your profile
-- `/remove_address <address>` - Remove a wallet address from your profile
-- `/list_addresses` - List your registered wallet addresses
-- `/setup_roles` - Create necessary roles (Admin only)
-- `/check_roles` - Check role configuration
+All functionality is available through both slash commands and buttons:
+
+- **Verify** - Check Ordinal ownership and get roles
+- **Add Address** - Link your wallet address (requires ME bio verification)
+- **Remove Address** - Remove a wallet address
+- **List Addresses** - View your registered wallets
+- **Check Roles** - View your current collection roles
+- **Help** - Show available commands and instructions
+
+Admin Commands:
+- `/setup_roles` - Create necessary roles (Requires Manage Roles)
+- `/setup_verification` - Set up verification channel with buttons
 - `/ping` - Check bot latency
 
 ## Required Permissions
 
-The bot requires the following permissions:
-- Manage Roles (to assign roles based on NFT ownership)
-- View Channels (to see where commands are used)
-- Send Messages (to respond to commands)
+The bot uses minimal permissions for security:
+- Manage Roles (to assign roles based on Ordinal ownership)
+- View Channels (to see verification channel)
+- Send Messages (to send verification messages)
 - Use Application Commands (for slash commands)
 
 ## Security
 
-- Sensitive data like wallet addresses are stored locally
-- Command responses are ephemeral (only visible to the command user)
-- Minimal bot permissions required
+- Magic Eden bio verification ensures wallet ownership
+- Wallet addresses stored locally and privately
+- All responses are ephemeral (only visible to the user)
+- Minimal bot permissions for reduced attack surface
 - Single instance enforcement using lock file
+- Command-specific permission requirements
