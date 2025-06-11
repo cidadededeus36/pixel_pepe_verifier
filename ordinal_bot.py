@@ -71,20 +71,21 @@ class VerificationView(discord.ui.View):
 
     @discord.ui.button(label='Verify', style=ButtonStyle.primary, custom_id='verify_button')
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await verify(interaction)
+        await interaction.response.defer(ephemeral=True)
+        await verify._callback(interaction)
 
     @discord.ui.button(label='Help', style=ButtonStyle.secondary, custom_id='help_button')
     async def help_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         help_text = (
-            "**🤖 Pixel Pepe Verifier Bot Help**\n\n"
+            "**🐸 Pixel Pepe Verifier Bot Help**\n\n"
             "**Commands:**\n"
             "`/add_address <address>` - Link your wallet address\n"
             "`/remove_address <address>` - Remove a linked wallet\n"
             "`/list_addresses` - View your linked wallets\n"
-            "`/verify` - Check your NFT holdings and update roles\n\n"
+            "`/verify` - Check your Ordinal holdings and update roles\n\n"
             "**How to Use:**\n"
             "1. Click the Verify button or use `/add_address` to link your wallet\n"
-            "2. The bot will check your wallet for NFTs\n"
+            "2. The bot will check your wallet for Ordinals\n"
             "3. You'll receive roles based on your holdings\n"
             "4. Your holdings are checked every 30 minutes to keep roles updated\n"
         )
@@ -97,12 +98,6 @@ REQUIRED_PERMISSIONS = discord.Permissions(
     send_messages=True,
     use_application_commands=True
 )
-
-# Apply permissions to commands
-for cmd in ['verify', 'add_address', 'remove_address', 'list_addresses', 'setup_roles', 'check_roles', 'ping']:
-    if hasattr(bot.tree, cmd):
-        command = getattr(bot.tree, cmd)
-        command.default_permissions = REQUIRED_PERMISSIONS
 
 # Remove default help command as we'll use slash commands
 bot.remove_command('help')
@@ -138,20 +133,20 @@ async def verify_all_wallets():
                             logging.warning(f'Could not find role {role_name}')
                             continue
                             
-                        # Check if user owns any NFTs in collection
-                        has_nft = False
+                        # Check if user owns any Ordinals in collection
+                        has_ordinal = False
                         for address in addresses:
                             owns, count, _ = await verify_ownership(address, collection_slug)
                             if owns and count > 0:
-                                has_nft = True
+                                has_ordinal = True
                                 break
                                 
                         # Update role
                         try:
-                            if has_nft and role not in member.roles:
+                            if has_ordinal and role not in member.roles:
                                 await member.add_roles(role)
                                 logging.info(f'Added role {role_name} to {member.name}')
-                            elif not has_nft and role in member.roles:
+                            elif not has_ordinal and role in member.roles:
                                 await member.remove_roles(role)
                                 logging.info(f'Removed role {role_name} from {member.name}')
                         except discord.Forbidden:
@@ -176,8 +171,25 @@ async def verify_all_wallets():
 @bot.tree.command(name="setup_verification", description="Setup verification message with buttons (Requires Manage Channels)")
 @app_commands.checks.has_permissions(manage_channels=True)
 async def setup_verification(interaction: discord.Interaction):
+    # Check if bot has required permissions in the channel
+    permissions = interaction.channel.permissions_for(interaction.guild.me)
+    if not (permissions.send_messages and permissions.view_channel and permissions.embed_links):
+        missing_perms = []
+        if not permissions.send_messages:
+            missing_perms.append("Send Messages")
+        if not permissions.view_channel:
+            missing_perms.append("View Channel")
+        if not permissions.embed_links:
+            missing_perms.append("Embed Links")
+        await interaction.response.send_message(
+            f"❌ Bot is missing required permissions in this channel: {', '.join(missing_perms)}\n"
+            "Please give the bot these permissions in the channel settings.",
+            ephemeral=True
+        )
+        return
+
     embed = discord.Embed(
-        title="🎭 Pixel Pepe Holder Verification",
+        title="🐸 Pixel Pepe Holder Verification",
         description=(
             "Welcome to the Pixel Pepe holder verification!\n\n"
             "Click the **Verify** button below to link your wallet and receive your holder roles.\n"
@@ -186,9 +198,15 @@ async def setup_verification(interaction: discord.Interaction):
         color=discord.Color.blue()
     )
     
-    view = VerificationView()
-    await interaction.channel.send(embed=embed, view=view)
-    await interaction.response.send_message("✅ Verification message set up!", ephemeral=True)
+    try:
+        view = VerificationView()
+        await interaction.channel.send(embed=embed, view=view)
+        await interaction.response.send_message("✅ Verification message set up!", ephemeral=True)
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            "❌ Failed to send verification message. Please check the bot's permissions in this channel.",
+            ephemeral=True
+        )
 
 @bot.event
 async def setup_hook():
@@ -203,13 +221,12 @@ async def setup_hook():
         # Register commands with minimal permissions
         commands = [
             ping,
-            add_address,
             remove_address,
             list_addresses,
             verify,
             setup_roles,
-            check_roles,
-            setup_verification      
+            setup_verification,
+            check_roles
         ]
         logging.info('Registering commands with minimal permissions...')
         for cmd in commands:
@@ -322,26 +339,35 @@ async def list_addresses(interaction: discord.Interaction):
         await interaction.response.send_message("❌ You have no registered addresses!", ephemeral=True)
         return
     
-    addresses = "\n".join(user_addresses[user_id])
-    await interaction.response.send_message(f"Your linked addresses:\n```{addresses}```", ephemeral=True)
+    addresses = get_user_addresses(user_id)
+    formatted_addresses = "\n".join([f"{i+1}. {addr}" for i, addr in enumerate(addresses)])
+    await interaction.response.send_message(f"Your linked addresses:\n```{formatted_addresses}```", ephemeral=True)
 
 def get_user_addresses(user_id: str) -> List[str]:
     """Get list of addresses for a user"""
     return user_addresses.get(user_id, [])
 
-@bot.tree.command(name="verify", description="Verify NFT ownership and assign roles")
+@bot.tree.command(name="verify", description="Verify Ordinal ownership and assign roles")
 async def verify(interaction: discord.Interaction):
     if not interaction.guild:
-        await interaction.response.send_message("❌ This command can only be used in a server!", ephemeral=True)
+        if not interaction.response.is_done():
+            await interaction.response.send_message("❌ This command can only be used in a server!", ephemeral=True)
+        else:
+            await interaction.followup.send("❌ This command can only be used in a server!", ephemeral=True)
         return
 
-    # Debug info
-    bot_member = interaction.guild.get_member(bot.user.id)
-    logging.info(f"Bot roles: {[r.name for r in bot_member.roles]}")
-    logging.info(f"Bot top role position: {bot_member.top_role.position}")
-    logging.info(f"Bot permissions: {bot_member.guild_permissions.value}")
+    user_id = str(interaction.user.id)
+    if user_id not in user_addresses or not user_addresses[user_id]:
+        if not interaction.response.is_done():
+            await interaction.response.send_message("❌ You haven't registered any wallet addresses! Use `/add_address` first.", ephemeral=True)
+        else:
+            await interaction.followup.send("❌ You haven't registered any wallet addresses! Use `/add_address` first.", ephemeral=True)
+        return
 
-    await interaction.response.send_message("Starting verification process... Please wait.", ephemeral=True)
+    if not interaction.response.is_done():
+        await interaction.response.send_message("Starting verification process... Please wait.", ephemeral=True)
+    else:
+        await interaction.followup.send("Starting verification process... Please wait.", ephemeral=True)
     user_id = str(interaction.user.id)
     addresses = get_user_addresses(user_id)
     
@@ -363,14 +389,14 @@ async def verify(interaction: discord.Interaction):
             
         logging.info(f"Checking role {role_name} (position {role.position})")
         user_has_role = role in interaction.user.roles
-        owns_nft = False
+        owns_ordinal = False
         max_count = 0
         collection_inscriptions = None
         
         for addr in addresses:
             is_holder, count, inscriptions = await verify_ownership(addr, slug)
             if is_holder and count is not None:  # Make sure we have valid count data
-                owns_nft = True
+                owns_ordinal = True
                 if count > max_count:
                     max_count = count
                     collection_inscriptions = inscriptions
@@ -384,7 +410,7 @@ async def verify(interaction: discord.Interaction):
                         roles_error.append(role_name)
                 break
         
-        if owns_nft:
+        if owns_ordinal:
             verified_collections.append(slug)
             holdings[slug] = (max_count, collection_inscriptions)
         elif user_has_role:
@@ -407,7 +433,7 @@ async def verify(interaction: discord.Interaction):
             collection_name = COLLECTIONS[slug].replace(' Holder', '')
             msg += f"• {collection_name}: {count} inscription{'s' if count != 1 else ''}\n"
     else:
-        msg = "❌ No NFTs found in the verified collections."
+        msg = "❌ No Ordinals found in the verified collections."
     
     if roles_error:
         msg += f"\n⚠️ Bot couldn't manage these roles: {', '.join(roles_error)}"
