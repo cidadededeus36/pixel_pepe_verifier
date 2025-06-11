@@ -1,10 +1,10 @@
-# Discord NFT Verification Bot
+# Discord Ordinal Verification Bot
 
-A Discord bot that verifies NFT ownership across multiple collections and assigns roles accordingly.
+A Discord bot that verifies Ordinal ownership across multiple collections and assigns roles accordingly.
 
 ## Features
 
-- Verify NFT ownership using BestInSlot.xyz API
+- Verify Ordinal ownership using BestInSlot.xyz API
 - Automatic role assignment based on NFT holdings
 - Support for multiple collections
 - Slash command interface
