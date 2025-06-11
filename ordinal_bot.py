@@ -135,10 +135,11 @@ class VerificationView(discord.ui.View):
             "• **Check Roles** - View your roles\n"
             "• **Verify Now** - Check holdings\n\n"
             "**How it Works:**\n"
-            "1. Click Add Address & enter your wallet\n"
-            "2. Click Verify to check your Ordinals\n"
-            "3. Get roles based on your holdings\n"
-            "4. Roles update every 30 minutes\n"
+            "1. Add your Discord ID to your Magic Eden bio\n"
+            "2. Click Add Address & enter your wallet\n"
+            "3. Click Verify to check your Ordinals\n"
+            "4. Get roles based on your holdings\n"
+            "5. Roles update every 30 minutes\n"
         )
         view = CommandView()
         await interaction.response.send_message(help_text, view=view, ephemeral=True)
