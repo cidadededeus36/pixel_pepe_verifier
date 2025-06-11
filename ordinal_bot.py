@@ -58,19 +58,26 @@ COLLECTIONS = {
 intents = discord.Intents.default()
 intents.guilds = True  # Only need guilds intent for slash commands
 
-# Set minimal required permissions
-perms = discord.Permissions.none()
-perms.manage_roles = True  # For role assignment
-perms.view_channel = True  # To see channels
-perms.send_messages = True  # To respond to commands
-perms.use_application_commands = True  # For slash commands
-
+# Initialize bot with minimal intents
 bot = commands.Bot(
     command_prefix='!',
     intents=intents,
-    description='Ordinal Verification Bot',
-    default_permissions=perms
+    description='Ordinal Verification Bot'
 )
+
+# Define required permissions for commands
+REQUIRED_PERMISSIONS = discord.Permissions(
+    manage_roles=True,
+    view_channel=True,
+    send_messages=True,
+    use_application_commands=True
+)
+
+# Apply permissions to commands
+for cmd in ['verify', 'add_address', 'remove_address', 'list_addresses', 'setup_roles', 'check_roles', 'ping']:
+    if hasattr(bot.tree, cmd):
+        command = getattr(bot.tree, cmd)
+        command.default_permissions = REQUIRED_PERMISSIONS
 
 # Remove default help command as we'll use slash commands
 bot.remove_command('help')
@@ -151,7 +158,7 @@ async def setup_hook():
         MY_GUILD = discord.Object(id=int(os.getenv('GUILD_ID', '0')))
         logging.info(f'Guild ID: {MY_GUILD.id}')
         
-        # Register commands
+        # Register commands with minimal permissions
         commands = [
             ping,
             add_address,
@@ -162,9 +169,10 @@ async def setup_hook():
             check_roles
         ]
         
-        logging.info('Registering commands...')
+        logging.info('Registering commands with minimal permissions...')
         for cmd in commands:
             logging.info(f'Adding command: {cmd.name}')
+            cmd.default_permissions = REQUIRED_PERMISSIONS
             bot.tree.add_command(cmd, guild=MY_GUILD)
         
         logging.info('Syncing commands...')
@@ -183,15 +191,42 @@ async def on_ready():
         logging.info(f'- {guild.name} (id: {guild.id})')
         
         # Log bot permissions in guild
-        logging.info(f'Bot permissions in {guild.name}:')
-        for perm, value in guild.me.guild_permissions:
-            if value:
-                logging.info(f'  - {perm}')
+        logging.info(f'\nBot permissions in {guild.name}:')
+        logging.info('Required permissions:')
+        logging.info('  - manage_roles (for role assignment)')
+        logging.info('  - view_channel (to see commands)')
+        logging.info('  - send_messages (to respond)')
+        logging.info('  - use_application_commands (for slash commands)')
+        
+        logging.info('\nActual permissions:')
+        all_perms = [
+            (perm, value) 
+            for perm, value in guild.me.guild_permissions
+        ]
+        all_perms.sort(key=lambda x: x[0])
+        
+        for perm, value in all_perms:
+            status = '✅' if value else '❌'
+            logging.info(f'  {status} {perm}')
         
         if guild.me.guild_permissions.use_application_commands:
-            logging.info('Bot has permission to use application commands')
+            logging.info('\n✅ Bot has permission to use application commands')
         else:
-            logging.warning('Bot does not have permission to use application commands')
+            logging.warning('\n❌ Bot does not have permission to use application commands')
+        
+        # Check if we have the minimal required permissions
+        required_perms = {
+            'manage_roles': guild.me.guild_permissions.manage_roles,
+            'view_channel': guild.me.guild_permissions.view_channel,
+            'send_messages': guild.me.guild_permissions.send_messages,
+            'use_application_commands': guild.me.guild_permissions.use_application_commands
+        }
+        
+        missing_perms = [perm for perm, has in required_perms.items() if not has]
+        if missing_perms:
+            logging.warning(f'\n❌ Missing required permissions: {", ".join(missing_perms)}')
+        else:
+            logging.info('\n✅ All required permissions are present')
         
     logging.info('------')
 
@@ -338,8 +373,8 @@ async def verify(interaction: discord.Interaction):
     
     await interaction.followup.send(msg, ephemeral=True)
 
-@bot.tree.command(name="setup_roles", description="Create missing roles (Admin only)")
-@app_commands.checks.has_permissions(administrator=True)
+@bot.tree.command(name="setup_roles", description="Create missing roles (Requires Manage Roles permission)")
+@app_commands.checks.has_permissions(manage_roles=True)
 async def setup_roles(interaction: discord.Interaction):
     roles_created = []
     roles_existing = []
