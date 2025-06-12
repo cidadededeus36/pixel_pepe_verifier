@@ -13,7 +13,7 @@ A Discord bot that verifies Ordinal ownership for Pixel Pepes collections and as
 - Slash commands and buttons for easy interaction
 - Ephemeral responses for privacy
 
-## Setup
+## Local Setup
 
 1. Create a `.env` file with the following variables:
    ```
@@ -32,6 +32,133 @@ A Discord bot that verifies Ordinal ownership for Pixel Pepes collections and as
    ```bash
    python ordinal_bot.py
    ```
+
+## Deployment
+
+### Prerequisites
+
+1. VPS Requirements:
+   - Ubuntu 20.04 or later
+   - Python 3.8 or later
+   - Git installed
+   - Sudo access
+
+2. Discord Bot Setup:
+   - Create a bot in [Discord Developer Portal](https://discord.com/developers/applications)
+   - Enable Server Members Intent
+   - Get your bot token
+   - Get your server (guild) ID
+
+### VPS Deployment (Recommended)
+
+1. Update system and install Python:
+   ```bash
+   sudo apt update && sudo apt upgrade -y
+   sudo apt install python3-venv python3-pip git -y
+   ```
+
+2. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/pixel_pepe_verifier.git
+   cd pixel_pepe_verifier
+   ```
+
+3. Configure environment:
+   ```bash
+   cp .env.example .env
+   nano .env  # Add your bot token and guild ID
+   ```
+
+4. Run installation script:
+   ```bash
+   chmod +x install.sh
+   ./install.sh
+   ```
+
+5. Verify deployment:
+   ```bash
+   # Check service status
+   sudo systemctl status ordinal-bot
+   
+   # View logs
+   journalctl -u ordinal-bot -f
+   ```
+
+### Data Storage
+
+The bot stores data in:
+- `data/user_addresses.json`: Wallet addresses
+- `bot.log`: Application logs
+
+Backup these files regularly for data safety.
+
+### Security Considerations
+
+1. File Permissions:
+   ```bash
+   # Secure .env file
+   chmod 600 .env
+   
+   # Secure data directory
+   chmod 700 data
+   ```
+
+2. Bot Token Safety:
+   - Never commit .env file
+   - Rotate bot token if compromised
+   - Use restricted bot permissions
+
+### Bot Invite Link
+
+Use this link to invite the bot to your server (requires Manage Roles permission):
+https://discord.com/api/oauth2/authorize?client_id=1382141792207507546&permissions=268435456&scope=bot%20applications.commands
+
+### Maintenance
+
+#### Regular Updates
+```bash
+# Update bot code
+git pull
+
+# Reinstall dependencies and restart
+./install.sh
+```
+
+#### Service Management
+```bash
+# Start bot
+sudo systemctl start ordinal-bot
+
+# Stop bot
+sudo systemctl stop ordinal-bot
+
+# Restart bot
+sudo systemctl restart ordinal-bot
+
+# Check status
+sudo systemctl status ordinal-bot
+```
+
+#### Logging
+```bash
+# View live logs
+journalctl -u ordinal-bot -f
+
+# View last 100 lines
+journalctl -u ordinal-bot -n 100
+
+# View logs since last hour
+journalctl -u ordinal-bot --since "1 hour ago"
+```
+
+#### Backup
+```bash
+# Backup data directory
+cp -r data data.backup
+
+# Backup environment
+cp .env .env.backup
+```
 
 ## Commands & Buttons
 

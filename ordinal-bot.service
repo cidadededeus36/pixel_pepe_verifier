@@ -1,13 +1,13 @@
 [Unit]
-Description=Discord NFT Verification Bot
+Description=Pixel Pepes Ordinal Verification Bot
 After=network.target
 
 [Service]
 Type=simple
 User=badua
-WorkingDirectory=/home/badua/dev/projects/discord_verify_bot - Copy
+WorkingDirectory=/home/badua/dev/projects/pixel_pepe_verifier
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/badua/dev/projects/discord_verify_bot - Copy/venv/bin/python ordinal_bot.py
+ExecStart=/home/badua/dev/projects/pixel_pepe_verifier/venv/bin/python ordinal_bot.py
 Restart=always
 RestartSec=10
 
