@@ -58,13 +58,13 @@ COLLECTIONS = {
     'pixel-mumus': 'Pixel Mumu Holder',
 }
 
-# Booster role name
-BOOSTER_ROLE_NAME = "Server Booster"
+# Booster role name - commented out as no longer needed
+# BOOSTER_ROLE_NAME = "Server Booster"
 
 # Initialize bot with minimal required intents and permissions
 intents = discord.Intents.default()
 intents.guilds = True  # Only need guilds intent for slash commands
-intents.members = True  # Need member updates for booster tracking
+# intents.members = True  # Need member updates for booster tracking - commented out as no longer needed
 intents.message_content = True  # Required for prefix commands to work
 
 # Initialize bot with minimal intents
@@ -816,48 +816,49 @@ def remove_lock_file():
     except Exception as e:
         logging.error(f"Error removing lock file: {e}")
 
-@bot.event
-async def on_member_update(before, after):
-    # Check if premium_since changed (boost status)
-    if before.premium_since != after.premium_since:
-        guild = after.guild
-        booster_role = discord.utils.get(guild.roles, name=BOOSTER_ROLE_NAME)
-        
-        # Create booster role if it doesn't exist
-        if not booster_role:
-            try:
-                booster_role = await guild.create_role(
-                    name=BOOSTER_ROLE_NAME,
-                    color=discord.Color.from_rgb(244, 127, 255),  # Pink color
-                    reason="Role for server boosters"
-                )
-                logging.info(f"Created {BOOSTER_ROLE_NAME} role")
-            except Exception as e:
-                logging.error(f"Failed to create booster role: {e}")
-                return
-        
-        # Member started boosting
-        if after.premium_since and not before.premium_since:
-            try:
-                await after.add_roles(booster_role, reason="User started boosting the server")
-                logging.info(f"Added booster role to {after.display_name}")
-                
-                # Send thank you message
-                try:
-                    await after.send(f"Thank you for boosting the server! You've been given the {BOOSTER_ROLE_NAME} role.")
-                except:
-                    logging.info(f"Couldn't DM {after.display_name} about booster role")
-                    
-            except Exception as e:
-                logging.error(f"Failed to add booster role: {e}")
-        
-        # Member stopped boosting
-        elif before.premium_since and not after.premium_since:
-            try:
-                await after.remove_roles(booster_role, reason="User stopped boosting the server")
-                logging.info(f"Removed booster role from {after.display_name}")
-            except Exception as e:
-                logging.error(f"Failed to remove booster role: {e}")
+# Commented out booster-related event handler
+# @bot.event
+# async def on_member_update(before, after):
+#     # Check if premium_since changed (boost status)
+#     if before.premium_since != after.premium_since:
+#         guild = after.guild
+#         booster_role = discord.utils.get(guild.roles, name=BOOSTER_ROLE_NAME)
+#         
+#         # Create booster role if it doesn't exist
+#         if not booster_role:
+#             try:
+#                 booster_role = await guild.create_role(
+#                     name=BOOSTER_ROLE_NAME,
+#                     color=discord.Color.from_rgb(244, 127, 255),  # Pink color
+#                     reason="Role for server boosters"
+#                 )
+#                 logging.info(f"Created {BOOSTER_ROLE_NAME} role")
+#             except Exception as e:
+#                 logging.error(f"Failed to create booster role: {e}")
+#                 return
+#        
+#        # Member started boosting
+#        if after.premium_since and not before.premium_since:
+#            try:
+#                await after.add_roles(booster_role, reason="User started boosting the server")
+#                logging.info(f"Added booster role to {after.display_name}")
+#                
+#        #        # Send thank you message
+#                try:
+#                    await after.send(f"Thank you for boosting the server! You've been given the {BOOSTER_ROLE_NAME} role.")
+#                except:
+#                    logging.info(f"Couldn't DM {after.display_name} about booster role")
+#                    
+#            except Exception as e:
+#                logging.error(f"Failed to add booster role: {e}")
+#        
+#        # Member stopped boosting
+#        elif before.premium_since and not after.premium_since:
+#            try:
+#                await after.remove_roles(booster_role, reason="User stopped boosting the server")
+#                logging.info(f"Removed booster role from {after.display_name}")
+#            except Exception as e:
+#                logging.error(f"Failed to remove booster role: {e}")
 
 # Run the bot
 if __name__ == "__main__":
