@@ -61,12 +61,13 @@ BOOSTER_ROLE_NAME = "Server Booster"
 intents = discord.Intents.default()
 intents.guilds = True  # Only need guilds intent for slash commands
 intents.members = True  # Need member updates for booster tracking
+intents.message_content = True  # Required for prefix commands to work
 
 # Initialize bot with minimal intents
 bot = commands.Bot(
     command_prefix='!',
     intents=intents,
-    description='Ordinal Verification Bot'
+    description='Pixel Pepes Verifier Bot'
 )
 
 class CommandView(discord.ui.View):
