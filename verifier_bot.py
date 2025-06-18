@@ -54,9 +54,13 @@ COLLECTIONS = {
     'pixel-mumus': 'Pixel Mumu Holder',
 }
 
+# Booster role name
+BOOSTER_ROLE_NAME = "Server Booster"
+
 # Initialize bot with minimal required intents and permissions
 intents = discord.Intents.default()
 intents.guilds = True  # Only need guilds intent for slash commands
+intents.members = True  # Need member updates for booster tracking
 
 # Initialize bot with minimal intents
 bot = commands.Bot(
@@ -128,12 +132,6 @@ class VerificationView(discord.ui.View):
     async def help_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         help_text = (
             "**🐸 Pixel Pepes Verifier Bot Help**\n\n"
-            "Use the buttons below to manage your verification:\n\n"
-            "• **Add Address** - Link your wallet\n"
-            "• **Remove Address** - Remove a wallet\n"
-            "• **List Addresses** - View your wallets\n"
-            "• **Check Roles** - View your roles\n"
-            "• **Verify Now** - Check holdings\n\n"
             "**How it Works:**\n"
             "1. Add your Discord ID to your Magic Eden bio\n"
             "2. Click Add Address & enter your wallet\n"
@@ -268,25 +266,40 @@ async def setup_hook():
     # Start periodic wallet verification
     bot.loop.create_task(verify_all_wallets())
     try:
-        MY_GUILD = discord.Object(id=int(os.getenv('GUILD_ID', '0')))
-        logging.info(f'Guild ID: {MY_GUILD.id}')
+        guild_id = os.getenv('GUILD_ID', '0')
+        if guild_id == '0' or not guild_id.isdigit():
+            logging.warning('No valid GUILD_ID found in environment variables. Commands will be registered globally.')
+            MY_GUILD = None
+        else:
+            MY_GUILD = discord.Object(id=int(guild_id))
+            logging.info(f'Guild ID: {MY_GUILD.id}')
         
         # Register commands with minimal permissions
         # Only register commands that don't have decorators
         commands = [
             setup_verification
         ]
-        logging.info('Registering commands with minimal permissions...')
+        
         for cmd in commands:
-            logging.info(f'Adding command: {cmd.name}')
             cmd.default_permissions = REQUIRED_PERMISSIONS
-            bot.tree.add_command(cmd, guild=MY_GUILD)
+            if MY_GUILD:
+                bot.tree.add_command(cmd, guild=MY_GUILD)
+            else:
+                bot.tree.add_command(cmd)
         
         logging.info('Syncing commands...')
-        synced = await bot.tree.sync(guild=MY_GUILD)
-        logging.info(f'Commands synced successfully! Synced {len(synced)} commands:')
-        for cmd in synced:
-            logging.info(f'  - {cmd.name}')
+        try:
+            if MY_GUILD:
+                synced = await bot.tree.sync(guild=MY_GUILD)
+            else:
+                synced = await bot.tree.sync()
+            logging.info(f'Commands synced successfully! Synced {len(synced)} commands:')
+            for cmd in synced:
+                logging.info(f'  - {cmd.name}')
+        except discord.errors.Forbidden as e:
+            logging.error(f'Failed to sync commands: {e}. Check bot permissions.')
+        except Exception as e:
+            logging.error(f'Failed to sync commands: {e}', exc_info=True)
     except Exception as e:
         logging.error(f'Failed in setup_hook: {e}', exc_info=True)
 
@@ -503,6 +516,7 @@ async def setup_roles(interaction: discord.Interaction):
     roles_created = []
     roles_existing = []
     
+    # Check collection roles
     for role_name in COLLECTIONS.values():
         role = discord.utils.get(interaction.guild.roles, name=role_name)
         if not role:
@@ -511,7 +525,20 @@ async def setup_roles(interaction: discord.Interaction):
         else:
             roles_existing.append(role_name)
     
+    # Check booster role
+    booster_role = discord.utils.get(interaction.guild.roles, name=BOOSTER_ROLE_NAME)
+    if not booster_role:
+        await interaction.guild.create_role(
+            name=BOOSTER_ROLE_NAME,
+            color=discord.Color.from_rgb(244, 127, 255),  # Pink color
+            reason="Role for server boosters"
+        )
+        roles_created.append(BOOSTER_ROLE_NAME)
+    else:
+        roles_existing.append(BOOSTER_ROLE_NAME)
+    
     msg = ""
+    
     if roles_created:
         msg += f"✅ Created roles: {', '.join(roles_created)}\n"
     if roles_existing:
@@ -524,12 +551,19 @@ async def check_roles(interaction: discord.Interaction):
     user_roles = [role.name for role in interaction.user.roles]
     verified_roles = [role for role in COLLECTIONS.values() if role in user_roles]
     
+    msg = ""
+    
+    # Check collection roles
     if verified_roles:
-        msg = "Your collection roles:\n"
+        msg += "Your collection roles:\n"
         for role in verified_roles:
             msg += f"• {role}\n"
     else:
-        msg = "You don't have any collection roles yet!"
+        msg += "You don't have any collection roles yet!\n"
+    
+    # Check booster status
+    if BOOSTER_ROLE_NAME in user_roles:
+        msg += "\n⭐ You are a server booster! Thank you for your support!"
     
     await interaction.response.send_message(msg, ephemeral=True)
 
@@ -717,6 +751,49 @@ def remove_lock_file():
         Path('bot.lock').unlink(missing_ok=True)
     except Exception as e:
         logging.error(f"Error removing lock file: {e}")
+
+@bot.event
+async def on_member_update(before, after):
+    # Check if premium_since changed (boost status)
+    if before.premium_since != after.premium_since:
+        guild = after.guild
+        booster_role = discord.utils.get(guild.roles, name=BOOSTER_ROLE_NAME)
+        
+        # Create booster role if it doesn't exist
+        if not booster_role:
+            try:
+                booster_role = await guild.create_role(
+                    name=BOOSTER_ROLE_NAME,
+                    color=discord.Color.from_rgb(244, 127, 255),  # Pink color
+                    reason="Role for server boosters"
+                )
+                logging.info(f"Created {BOOSTER_ROLE_NAME} role")
+            except Exception as e:
+                logging.error(f"Failed to create booster role: {e}")
+                return
+        
+        # Member started boosting
+        if after.premium_since and not before.premium_since:
+            try:
+                await after.add_roles(booster_role, reason="User started boosting the server")
+                logging.info(f"Added booster role to {after.display_name}")
+                
+                # Send thank you message
+                try:
+                    await after.send(f"Thank you for boosting the server! You've been given the {BOOSTER_ROLE_NAME} role.")
+                except:
+                    logging.info(f"Couldn't DM {after.display_name} about booster role")
+                    
+            except Exception as e:
+                logging.error(f"Failed to add booster role: {e}")
+        
+        # Member stopped boosting
+        elif before.premium_since and not after.premium_since:
+            try:
+                await after.remove_roles(booster_role, reason="User stopped boosting the server")
+                logging.info(f"Removed booster role from {after.display_name}")
+            except Exception as e:
+                logging.error(f"Failed to remove booster role: {e}")
 
 # Run the bot
 if __name__ == "__main__":
