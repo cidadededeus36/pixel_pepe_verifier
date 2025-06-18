@@ -8,7 +8,7 @@ import json
 import requests
 from io import StringIO
 import pandas as pd
-from typing import List, Tuple, Optional, List, Tuple
+from typing import List, Tuple, Optional, Dict
 from pathlib import Path
 import secrets
 import asyncio
@@ -17,6 +17,8 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pickle
 from dotenv import load_dotenv
+import random
+import string
 
 # Set up logging
 logging.basicConfig(
@@ -41,8 +43,10 @@ RATE_LIMIT_WINDOW = 60  # seconds
 CHECK_INTERVAL = 60  # seconds
 VERIFICATION_TIMEOUT = 1800  # 30 minutes
 USER_DATA_FILE = 'data/user_addresses.json'
-
-# How often to check all wallets (in minutes)
+DATA_DIR = Path('data')
+WALLETS_FILE = DATA_DIR / 'wallets.json'
+VERIFICATION_CODES_FILE = DATA_DIR / 'verification_codes.json'
+LOCK_FILE = DATA_DIR / 'lock.file'
 WALLET_CHECK_INTERVAL = 30  # Check every 30 minutes
 
 # Collection configurations
@@ -102,12 +106,16 @@ class AddAddressModal(discord.ui.Modal, title='Add Wallet Address'):
         user_id = str(interaction.user.id)
         address = str(self.address)
         
+        # Get the user's verification code
+        verification_code = await get_user_verification_code(user_id)
+        
         # Check bio verification first
         has_bio = await verify_me_bio(address, user_id)
         if not has_bio:
             await interaction.response.send_message(
-                "❌ Please add your Discord ID to your Magic Eden bio first!\n" \
-                f"Your Discord ID is: {user_id}", 
+                "❌ Please add your verification code to your Magic Eden bio first!\n" \
+                f"Your verification code is: **{verification_code}**\n\n" \
+                "This code helps protect your privacy by not revealing your Discord ID.", 
                 ephemeral=True
             )
             return
@@ -420,6 +428,9 @@ async def verify(interaction: discord.Interaction):
 
     user_id = str(interaction.user.id)
     if user_id not in user_addresses or not user_addresses[user_id]:
+        # Get the user's verification code to display
+        verification_code = await get_user_verification_code(user_id)
+        
         class NoAddressView(discord.ui.View):
             def __init__(self):
                 super().__init__(timeout=None)
@@ -428,10 +439,17 @@ async def verify(interaction: discord.Interaction):
             async def add_address_button(self, inner_interaction: discord.Interaction, button: discord.ui.Button):
                 await inner_interaction.response.send_modal(AddAddressModal())
 
+        message = (
+            "❌ No wallet addresses found! Click below to add one:\n\n"
+            "When adding your address, you'll need to put your verification code in your Magic Eden bio.\n"
+            f"Your verification code is: **{verification_code}**\n\n"
+            "This code helps protect your privacy by not revealing your Discord ID."
+        )
+        
         if not interaction.response.is_done():
-            await interaction.response.send_message("❌ No wallet addresses found! Click below to add one:", view=NoAddressView(), ephemeral=True)
+            await interaction.response.send_message(message, view=NoAddressView(), ephemeral=True)
         else:
-            await interaction.followup.send("❌ No wallet addresses found! Click below to add one:", view=NoAddressView(), ephemeral=True)
+            await interaction.followup.send(message, view=NoAddressView(), ephemeral=True)
         return
 
     if not interaction.response.is_done():
@@ -682,12 +700,57 @@ async def verify_ownership(address: str, collection_slug: str) -> Tuple[bool, Op
         logging.error(f"Error verifying ownership: {e}", exc_info=True)
         return False, None, None
 
+def generate_verification_code(length=8):
+    """Generate a random verification code"""
+    # Use a mix of uppercase letters and numbers for better readability
+    chars = string.ascii_uppercase + string.digits
+    # Exclude similar looking characters
+    chars = chars.replace('O', '').replace('0', '').replace('I', '').replace('1', '')
+    return ''.join(random.choice(chars) for _ in range(length))
+
+async def get_user_verification_code(user_id: str) -> str:
+    """Get or create a verification code for a user"""
+    # Create data directory if it doesn't exist
+    DATA_DIR.mkdir(exist_ok=True)
+    
+    # Load existing codes
+    codes = {}
+    if VERIFICATION_CODES_FILE.exists():
+        try:
+            with open(VERIFICATION_CODES_FILE, 'r') as f:
+                codes = json.load(f)
+        except Exception as e:
+            logging.error(f"Error loading verification codes: {e}")
+    
+    # Get or create code for this user
+    if user_id not in codes:
+        # Generate a unique code
+        while True:
+            code = generate_verification_code()
+            # Make sure it's not already used
+            if code not in codes.values():
+                break
+        
+        codes[user_id] = code
+        
+        # Save the updated codes
+        try:
+            with open(VERIFICATION_CODES_FILE, 'w') as f:
+                json.dump(codes, f, indent=2)
+        except Exception as e:
+            logging.error(f"Error saving verification codes: {e}")
+    
+    return codes[user_id]
+
 async def verify_me_bio(address: str, user_id: str) -> bool:
-    """Verify if the user has put their Discord ID in their ME bio"""
+    """Verify if the user has put their verification code in their ME bio"""
     await check_rate_limit()
     try:
+        # Get the user's verification code
+        verification_code = await get_user_verification_code(user_id)
+        
         logging.info(f"\nChecking Magic Eden bio for address: {address}")
-        logging.info(f"Looking for Discord ID: {user_id}")
+        logging.info(f"Looking for verification code: {verification_code}")
         
         url = f"{MAGICEDEN_API}{address}"
         logging.info(f"Making request to: {url}")
@@ -707,8 +770,8 @@ async def verify_me_bio(address: str, user_id: str) -> bool:
                 return False
                 
             bio = bio.strip()
-            result = str(user_id) in bio
-            logging.info(f"Discord ID ({user_id}) found in bio: {result}")
+            result = verification_code in bio
+            logging.info(f"Verification code ({verification_code}) found in bio: {result}")
             logging.info(f"Bio content: {bio!r}")
             return result
         else:
